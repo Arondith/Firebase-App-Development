@@ -278,7 +278,7 @@ export function Dashboard({ user }: DashboardProps) {
         <div className="header-actions">
           <span className="sync-indicator">
             <span className="sync-dot" />
-            Live
+            Synced
           </span>
           <div className="user-chip">
             <span className="user-avatar">
@@ -302,10 +302,11 @@ export function Dashboard({ user }: DashboardProps) {
       <section className="dashboard-content">
         <div className="page-heading">
           <div>
+            <span className="page-kicker">Job search workspace</span>
             <h1>Applications</h1>
             <p>
-              Keep every opportunity, follow-up, contact and document in one
-              place.
+              Track opportunities, keep follow-ups visible, and preserve the
+              context around every application.
             </p>
           </div>
           <div className="page-actions">
@@ -315,7 +316,7 @@ export function Dashboard({ user }: DashboardProps) {
               onClick={() => exportApplicationsCsv(applications)}
               disabled={applications.length === 0}
             >
-              Export CSV
+              Export
             </button>
             <button
               className="button primary-button"
@@ -330,44 +331,74 @@ export function Dashboard({ user }: DashboardProps) {
           </div>
         </div>
 
-        <section className="stats-grid" aria-label="Application statistics">
-          <article className="stat-card">
-            <span>Tracked</span>
-            <strong>{metrics.total}</strong>
-            <small>All opportunities</small>
-          </article>
-          <article className="stat-card">
-            <span>Submitted</span>
-            <strong>{metrics.submitted}</strong>
-            <small>Applications sent</small>
-          </article>
-          <article className="stat-card">
-            <span>Interview rate</span>
-            <strong>{metrics.interviewRate}%</strong>
-            <small>Reached interview or offer</small>
-          </article>
-          <article className="stat-card stat-attention">
-            <span>Needs attention</span>
-            <strong>{metrics.overdue + metrics.dueToday}</strong>
-            <small>
-              {metrics.overdue} overdue · {metrics.dueToday} today
-            </small>
-          </article>
-          <article className="stat-card">
-            <span>Offers</span>
-            <strong>{metrics.offers}</strong>
-            <small>Current offers</small>
-          </article>
+        <section className="overview-grid">
+          <section className="summary-panel" aria-labelledby="overview-heading">
+            <div className="summary-heading">
+              <div>
+                <h2 id="overview-heading">Overview</h2>
+                <p>Your current application pipeline at a glance.</p>
+              </div>
+            </div>
+
+            <div className="stats-grid" aria-label="Application statistics">
+              <article className="stat-card">
+                <span>Tracked</span>
+                <strong>{metrics.total}</strong>
+              </article>
+              <article className="stat-card">
+                <span>Submitted</span>
+                <strong>{metrics.submitted}</strong>
+              </article>
+              <article className="stat-card">
+                <span>Interview rate</span>
+                <strong>{metrics.interviewRate}%</strong>
+              </article>
+              <article className="stat-card stat-attention">
+                <span>Needs attention</span>
+                <strong>{metrics.overdue + metrics.dueToday}</strong>
+                <small>
+                  {metrics.overdue} overdue · {metrics.dueToday} today
+                </small>
+              </article>
+              <article className="stat-card">
+                <span>Offers</span>
+                <strong>{metrics.offers}</strong>
+              </article>
+            </div>
+          </section>
+
+          {applications.length > 0 && (
+            <FollowUpPanel
+              applications={applications}
+              onEdit={openEditor}
+            />
+          )}
         </section>
 
-        {applications.length > 0 && (
-          <FollowUpPanel
-            applications={applications}
-            onEdit={openEditor}
-          />
-        )}
-
         <section className="workspace">
+          <div className="workspace-titlebar">
+            <div>
+              <h2>Pipeline</h2>
+              <p>Move applications through each stage as your search progresses.</p>
+            </div>
+            <div className="view-switcher" aria-label="View">
+              <button
+                className={view === "board" ? "active" : ""}
+                type="button"
+                onClick={() => setView("board")}
+              >
+                Board
+              </button>
+              <button
+                className={view === "list" ? "active" : ""}
+                type="button"
+                onClick={() => setView("list")}
+              >
+                List
+              </button>
+            </div>
+          </div>
+
           <div className="workspace-toolbar">
             <div className="workspace-filters">
               <input
@@ -401,27 +432,9 @@ export function Dashboard({ user }: DashboardProps) {
               </label>
             </div>
 
-            <div className="toolbar-right">
-              <span className="result-count">
-                {filteredApplications.length} shown
-              </span>
-              <div className="view-switcher" aria-label="View">
-                <button
-                  className={view === "board" ? "active" : ""}
-                  type="button"
-                  onClick={() => setView("board")}
-                >
-                  Board
-                </button>
-                <button
-                  className={view === "list" ? "active" : ""}
-                  type="button"
-                  onClick={() => setView("list")}
-                >
-                  List
-                </button>
-              </div>
-            </div>
+            <span className="result-count">
+              {filteredApplications.length} of {applications.length}
+            </span>
           </div>
 
           {dataError && <div className="data-error">{dataError}</div>}
@@ -471,6 +484,7 @@ export function Dashboard({ user }: DashboardProps) {
                 return (
                   <section
                     className="board-column"
+                    data-status={status}
                     key={status}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={(event) => handleDrop(event, status)}
@@ -478,6 +492,7 @@ export function Dashboard({ user }: DashboardProps) {
                     <header className="column-header">
                       <div>
                         <div className="column-title-row">
+                          <span className="column-status-mark" />
                           <h2>{statusLabels[status]}</h2>
                           <span className="column-count">
                             {statusApplications.length}
