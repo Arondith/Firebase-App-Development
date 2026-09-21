@@ -5,32 +5,49 @@ import {
   signInWithPopup,
   updateProfile,
 } from "firebase/auth";
+import { FirebaseError } from "firebase/app";
 import { auth, googleProvider } from "../firebase";
 
 type Mode = "signin" | "signup";
 
 function friendlyAuthError(error: unknown): string {
-  if (!(error instanceof Error)) {
-    return "Something went wrong. Please try again.";
-  }
+  const code = error instanceof FirebaseError ? error.code : "";
 
-  if (error.message.includes("auth/invalid-credential")) {
-    return "The email or password is incorrect.";
+  switch (code) {
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "The email or password is incorrect.";
+    case "auth/email-already-in-use":
+      return "That email is already registered. Try signing in instead.";
+    case "auth/weak-password":
+      return "Use a stronger password with at least 6 characters.";
+    case "auth/invalid-email":
+      return "Enter a valid email address.";
+    case "auth/operation-not-allowed":
+      return "Email/Password sign-in is disabled in Firebase Authentication.";
+    case "auth/configuration-not-found":
+      return "Firebase Authentication is not configured for this project yet.";
+    case "auth/unauthorized-domain":
+      return "This website is not listed as an authorized domain in Firebase Authentication.";
+    case "auth/invalid-api-key":
+      return "The Firebase API key in the app configuration is invalid.";
+    case "auth/network-request-failed":
+      return "Firebase could not be reached. Check your internet connection and try again.";
+    case "auth/too-many-requests":
+      return "Firebase temporarily blocked more attempts. Wait a moment and try again.";
+    case "auth/popup-closed-by-user":
+      return "Google sign-in was closed before it finished.";
+    case "auth/popup-blocked":
+      return "Your browser blocked the Google sign-in popup.";
+    case "auth/account-exists-with-different-credential":
+      return "An account already exists with this email using a different sign-in method.";
+    default:
+      if (error instanceof FirebaseError) {
+        return `Firebase error: ${error.code}`;
+      }
+      return "Could not complete sign-in. Please try again.";
   }
-
-  if (error.message.includes("auth/email-already-in-use")) {
-    return "That email is already registered.";
-  }
-
-  if (error.message.includes("auth/weak-password")) {
-    return "Use a stronger password with at least 6 characters.";
-  }
-
-  if (error.message.includes("auth/popup-closed-by-user")) {
-    return "Google sign-in was closed before it finished.";
-  }
-
-  return "Could not complete sign-in. Please try again.";
 }
 
 export function AuthScreen() {
