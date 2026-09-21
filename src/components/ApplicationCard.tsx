@@ -1,5 +1,9 @@
 import type { ChangeEvent, DragEvent } from "react";
 import type { JobApplication } from "../types";
+import {
+  formatShortDate,
+  getDueState,
+} from "../utils/applications";
 
 interface ApplicationCardProps {
   application: JobApplication;
@@ -9,14 +13,6 @@ interface ApplicationCardProps {
   onDragStart: (event: DragEvent<HTMLElement>, applicationId: string) => void;
 }
 
-function formatDate(date: string) {
-  if (!date) return "";
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-  }).format(new Date(date + "T00:00:00"));
-}
-
 export function ApplicationCard({
   application,
   onEdit,
@@ -24,6 +20,8 @@ export function ApplicationCard({
   onUpload,
   onDragStart,
 }: ApplicationCardProps) {
+  const dueState = getDueState(application);
+
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     if (file) {
@@ -42,14 +40,9 @@ export function ApplicationCard({
         <span className={"priority-pill priority-" + application.priority}>
           {application.priority}
         </span>
-        <button
-          className="card-menu-button"
-          type="button"
-          onClick={() => onEdit(application)}
-          aria-label={"Edit " + application.company}
-        >
-          Edit
-        </button>
+        {application.source && (
+          <span className="source-label">{application.source}</span>
+        )}
       </div>
 
       <div className="card-company">
@@ -62,19 +55,39 @@ export function ApplicationCard({
         </div>
       </div>
 
-      {(application.location || application.salary) && (
+      {(application.location || application.workMode || application.salary) && (
         <div className="card-meta">
-          {application.location && <span>⌖ {application.location}</span>}
-          {application.salary && <span>◈ {application.salary}</span>}
+          {application.workMode &&
+            application.workMode !== "unspecified" && (
+              <span>{application.workMode}</span>
+            )}
+          {application.location && <span>{application.location}</span>}
+          {application.salary && <span>{application.salary}</span>}
         </div>
       )}
 
-      {application.notes && <p className="card-notes">{application.notes}</p>}
+      {(application.nextStep || application.nextStepDate) && (
+        <div className={"next-action " + (dueState ? "next-" + dueState : "")}>
+          <div>
+            <span>Next action</span>
+            <strong>{application.nextStep || "Follow up"}</strong>
+          </div>
+          {application.nextStepDate && (
+            <time dateTime={application.nextStepDate}>
+              {dueState === "overdue"
+                ? "Overdue"
+                : dueState === "today"
+                  ? "Today"
+                  : formatShortDate(application.nextStepDate)}
+            </time>
+          )}
+        </div>
+      )}
 
-      {application.nextStepDate && (
-        <div className="next-action">
-          <span>Next action</span>
-          <strong>{formatDate(application.nextStepDate)}</strong>
+      {(application.contactName || application.contactEmail) && (
+        <div className="contact-line">
+          <span>Contact</span>
+          <strong>{application.contactName || application.contactEmail}</strong>
         </div>
       )}
 
@@ -85,11 +98,19 @@ export function ApplicationCard({
           target="_blank"
           rel="noreferrer"
         >
-          ↗ {application.attachmentName || "Open attachment"}
+          {application.attachmentName || "Open attachment"} ↗
         </a>
       )}
 
       <div className="card-actions">
+        <button
+          className="card-action primary-card-action"
+          type="button"
+          onClick={() => onEdit(application)}
+        >
+          Edit
+        </button>
+
         {application.jobUrl && (
           <a
             className="card-action"
