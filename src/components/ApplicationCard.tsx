@@ -32,35 +32,45 @@ export function ApplicationCard({
 
   return (
     <article
-      className="application-card"
+      className={
+        "application-card" + (dueState ? " card-due-" + dueState : "")
+      }
       draggable
       onDragStart={(event) => onDragStart(event, application.id)}
     >
-      <div className="card-topline">
-        <span className={"priority-pill priority-" + application.priority}>
-          {application.priority}
-        </span>
-        {application.source && (
-          <span className="source-label">{application.source}</span>
-        )}
-      </div>
-
       <div className="card-company">
         <div className="company-avatar">
           {application.company.slice(0, 2).toUpperCase()}
         </div>
-        <div>
-          <h3>{application.role}</h3>
+        <div className="card-company-copy">
           <p>{application.company}</p>
+          <h3>{application.role}</h3>
         </div>
+        <button
+          className="card-edit-button"
+          type="button"
+          onClick={() => onEdit(application)}
+          aria-label={"Edit " + application.role + " at " + application.company}
+        >
+          Edit
+        </button>
       </div>
 
-      {(application.location || application.workMode || application.salary) && (
+      <div className="card-tags">
+        <span className={"priority-pill priority-" + application.priority}>
+          {application.priority}
+        </span>
+        {application.workMode &&
+          application.workMode !== "unspecified" && (
+            <span className="meta-pill">{application.workMode}</span>
+          )}
+        {application.source && (
+          <span className="meta-pill source-label">{application.source}</span>
+        )}
+      </div>
+
+      {(application.location || application.salary) && (
         <div className="card-meta">
-          {application.workMode &&
-            application.workMode !== "unspecified" && (
-              <span>{application.workMode}</span>
-            )}
           {application.location && <span>{application.location}</span>}
           {application.salary && <span>{application.salary}</span>}
         </div>
@@ -103,14 +113,6 @@ export function ApplicationCard({
       )}
 
       <div className="card-actions">
-        <button
-          className="card-action primary-card-action"
-          type="button"
-          onClick={() => onEdit(application)}
-        >
-          Edit
-        </button>
-
         {application.jobUrl && (
           <a
             className="card-action"
