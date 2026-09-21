@@ -1,5 +1,13 @@
 # ApplyFlow
 
+**Live app:** https://fir-app-development-b23dd.web.app
+
+## Project Preview
+
+[![ApplyFlow dashboard preview](assets/applyflow-dashboard-preview.webp)](https://fir-app-development-b23dd.web.app)
+
+> Click the preview to open the live Firebase-hosted application.
+
 ApplyFlow is a real-time job search workspace for people managing multiple applications, recruiter conversations, interviews and follow-ups.
 
 The problem is simple: once a job search grows beyond a handful of roles, important context gets scattered across spreadsheets, email, browser bookmarks and notes. ApplyFlow keeps the opportunity and the next action together.
