@@ -30,7 +30,7 @@ function friendlyAuthError(error: unknown): string {
     return "Google sign-in was closed before it finished.";
   }
 
-  return "Could not complete sign-in. Check your Firebase Auth setup and try again.";
+  return "Could not complete sign-in. Please try again.";
 }
 
 export function AuthScreen() {
@@ -84,46 +84,50 @@ export function AuthScreen() {
 
   return (
     <main className="auth-shell">
-      <section className="auth-hero">
+      <section className="auth-product">
         <a className="brand" href="/" aria-label="ApplyFlow home">
-          <span className="brand-mark">AF</span>
+          <span className="brand-mark">A</span>
           <span>ApplyFlow</span>
         </a>
 
-        <div className="auth-copy">
-          <p className="eyebrow">Firebase portfolio project</p>
-          <h1>Turn job hunting into a trackable workflow.</h1>
+        <div className="auth-product-copy">
+          <span className="product-label">Job search workspace</span>
+          <h1>Stop losing track of good opportunities.</h1>
           <p>
-            A real-time application command center built with React,
-            TypeScript, Firebase Authentication, Cloud Firestore and Storage.
+            Keep applications, recruiter details, follow-ups and interview
+            notes in one place so the next action is always clear.
           </p>
 
-          <div className="auth-feature-grid">
-            <article>
-              <strong>Live sync</strong>
-              <span>Firestore updates every signed-in session in real time.</span>
-            </article>
-            <article>
-              <strong>Cloud files</strong>
-              <span>Attach resumes, cover letters and supporting documents.</span>
-            </article>
-            <article>
-              <strong>Secure by user</strong>
-              <span>Firestore and Storage rules isolate each account.</span>
-            </article>
-          </div>
+          <ul className="product-points">
+            <li>
+              <strong>Know what needs attention.</strong>
+              <span>See overdue and upcoming follow-ups before they slip.</span>
+            </li>
+            <li>
+              <strong>Keep context with the application.</strong>
+              <span>Store contacts, links, documents and interview notes together.</span>
+            </li>
+            <li>
+              <strong>Understand your pipeline.</strong>
+              <span>Track progress and interview conversion without a spreadsheet.</span>
+            </li>
+          </ul>
         </div>
 
         <p className="auth-footnote">
-          Built as a production-style Firebase showcase, not a static UI demo.
+          Your workspace is private to your signed-in account.
         </p>
       </section>
 
       <section className="auth-panel">
         <div className="auth-card">
-          <div>
-            <p className="eyebrow">{mode === "signin" ? "Welcome back" : "Create account"}</p>
-            <h2>{mode === "signin" ? "Sign in to your workspace" : "Start tracking applications"}</h2>
+          <div className="auth-card-heading">
+            <span>{mode === "signin" ? "Welcome back" : "Create account"}</span>
+            <h2>
+              {mode === "signin"
+                ? "Sign in to ApplyFlow"
+                : "Create your workspace"}
+            </h2>
           </div>
 
           <button
@@ -137,7 +141,7 @@ export function AuthScreen() {
           </button>
 
           <div className="divider">
-            <span>or use email</span>
+            <span>or</span>
           </div>
 
           <form className="auth-form" onSubmit={handleEmailAuth}>
@@ -173,7 +177,9 @@ export function AuthScreen() {
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="At least 6 characters"
                 minLength={6}
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                autoComplete={
+                  mode === "signin" ? "current-password" : "new-password"
+                }
                 required
               />
             </label>
@@ -198,7 +204,7 @@ export function AuthScreen() {
             }}
           >
             {mode === "signin"
-              ? "New here? Create an account"
+              ? "Need an account? Create one"
               : "Already have an account? Sign in"}
           </button>
         </div>
