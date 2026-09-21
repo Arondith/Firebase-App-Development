@@ -19,10 +19,18 @@ import {
   APPLICATION_STATUSES,
   type ApplicationInput,
   type ApplicationStatus,
+  type DashboardView,
   type JobApplication,
 } from "../types";
+import {
+  exportApplicationsCsv,
+  getApplicationMetrics,
+  getDueState,
+} from "../utils/applications";
 import { ApplicationCard } from "./ApplicationCard";
 import { ApplicationForm } from "./ApplicationForm";
+import { ApplicationsTable } from "./ApplicationsTable";
+import { FollowUpPanel } from "./FollowUpPanel";
 
 interface DashboardProps {
   user: User;
@@ -37,11 +45,11 @@ const statusLabels: Record<ApplicationStatus, string> = {
 };
 
 const statusDescriptions: Record<ApplicationStatus, string> = {
-  wishlist: "Roles worth exploring",
-  applied: "Applications submitted",
-  interview: "Active conversations",
+  wishlist: "Save for later",
+  applied: "Waiting for response",
+  interview: "In conversation",
   offer: "Offers received",
-  rejected: "Closed opportunities",
+  rejected: "Closed",
 };
 
 export function Dashboard({ user }: DashboardProps) {
@@ -49,18 +57,38 @@ export function Dashboard({ user }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [queryText, setQueryText] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("all");
+  const [attentionOnly, setAttentionOnly] = useState(false);
+  const [view, setView] = useState<DashboardView>(() => {
+    const saved = window.localStorage.getItem("applyflow-view");
+    return saved === "list" ? "list" : "board";
+  });
   const [editing, setEditing] = useState<JobApplication | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [busyMessage, setBusyMessage] = useState("");
+  const [dataError, setDataError] = useState("");
 
   useEffect(() => {
-    const unsubscribe = subscribeToApplications(user.uid, (nextApplications) => {
-      setApplications(nextApplications);
-      setLoading(false);
-    });
+    const unsubscribe = subscribeToApplications(
+      user.uid,
+      (nextApplications) => {
+        setApplications(nextApplications);
+        setLoading(false);
+        setDataError("");
+      },
+      () => {
+        setLoading(false);
+        setDataError(
+          "We could not sync your applications. Check your connection and Firebase configuration.",
+        );
+      },
+    );
 
     return unsubscribe;
   }, [user.uid]);
+
+  useEffect(() => {
+    window.localStorage.setItem("applyflow-view", view);
+  }, [view]);
 
   const filteredApplications = useMemo(() => {
     const normalizedQuery = queryText.trim().toLowerCase();
@@ -68,7 +96,13 @@ export function Dashboard({ user }: DashboardProps) {
     return applications.filter((application) => {
       const matchesSearch =
         !normalizedQuery ||
-        [application.company, application.role, application.location]
+        [
+          application.company,
+          application.role,
+          application.location,
+          application.source ?? "",
+          application.contactName ?? "",
+        ]
           .join(" ")
           .toLowerCase()
           .includes(normalizedQuery);
@@ -76,31 +110,32 @@ export function Dashboard({ user }: DashboardProps) {
       const matchesPriority =
         priorityFilter === "all" || application.priority === priorityFilter;
 
-      return matchesSearch && matchesPriority;
-    });
-  }, [applications, priorityFilter, queryText]);
+      const matchesAttention =
+        !attentionOnly || getDueState(application) !== null;
 
-  const stats = useMemo(
-    () => ({
-      total: applications.length,
-      interviews: applications.filter((item) => item.status === "interview").length,
-      offers: applications.filter((item) => item.status === "offer").length,
-      active: applications.filter(
-        (item) => !["offer", "rejected"].includes(item.status),
-      ).length,
-    }),
+      return matchesSearch && matchesPriority && matchesAttention;
+    });
+  }, [applications, attentionOnly, priorityFilter, queryText]);
+
+  const metrics = useMemo(
+    () => getApplicationMetrics(applications),
     [applications],
   );
 
   async function handleSave(input: ApplicationInput) {
     if (editing) {
-      await updateApplication(editing.id, input);
+      await updateApplication(editing, input);
     } else {
       await createApplication(user.uid, input);
     }
 
     setShowForm(false);
     setEditing(null);
+  }
+
+  function openEditor(application: JobApplication) {
+    setEditing(application);
+    setShowForm(true);
   }
 
   async function handleDelete(application: JobApplication) {
@@ -130,7 +165,7 @@ export function Dashboard({ user }: DashboardProps) {
     try {
       await uploadApplicationFile(user.uid, application.id, file);
     } catch {
-      window.alert("Upload failed. Check Firebase Storage and its security rules.");
+      window.alert("Upload failed. Please try again.");
     } finally {
       setBusyMessage("");
     }
@@ -146,32 +181,50 @@ export function Dashboard({ user }: DashboardProps) {
         location: "Remote",
         salary: "$8–$12/hr",
         jobUrl: "",
-        notes: "React + API integration. Tailor portfolio around deployed projects.",
+        notes: "Tailor the portfolio around deployed React and Firebase work.",
         status: "wishlist",
         priority: "high",
         nextStepDate: "",
+        nextStep: "Review role requirements",
+        source: "Company website",
+        contactName: "",
+        contactEmail: "",
+        appliedDate: "",
+        workMode: "remote",
       },
       {
         company: "Cloudline Systems",
         role: "Software Engineer I",
-        location: "Remote · APAC",
+        location: "APAC",
         salary: "$38k–$48k",
         jobUrl: "",
-        notes: "Application submitted. Prepare Firebase architecture walkthrough.",
+        notes: "Application submitted with portfolio and GitHub.",
         status: "applied",
         priority: "medium",
         nextStepDate: "",
+        nextStep: "Follow up with recruiter",
+        source: "LinkedIn",
+        contactName: "Maya Chen",
+        contactEmail: "maya@example.com",
+        appliedDate: "",
+        workMode: "remote",
       },
       {
         company: "PixelForge",
         role: "Frontend Developer",
-        location: "Remote",
+        location: "Singapore",
         salary: "$10/hr",
         jobUrl: "",
-        notes: "Technical screen scheduled. Review React state patterns and accessibility.",
+        notes: "Review React state patterns and accessibility before the call.",
         status: "interview",
         priority: "high",
         nextStepDate: "",
+        nextStep: "Prepare technical interview",
+        source: "Referral",
+        contactName: "Alex Morgan",
+        contactEmail: "alex@example.com",
+        appliedDate: "",
+        workMode: "hybrid",
       },
     ];
 
@@ -198,25 +251,34 @@ export function Dashboard({ user }: DashboardProps) {
   ) {
     event.preventDefault();
     const applicationId = event.dataTransfer.getData("text/plain");
-    if (!applicationId) return;
-    await moveApplication(applicationId, status);
+    const application = applications.find(
+      (item) => item.id === applicationId,
+    );
+
+    if (!application) return;
+
+    try {
+      await moveApplication(application, status);
+    } catch {
+      window.alert("Could not move this application. Please try again.");
+    }
   }
 
   const displayName =
-    user.displayName?.trim() || user.email?.split("@")[0] || "there";
+    user.displayName?.trim() || user.email?.split("@")[0] || "Account";
 
   return (
     <main className="dashboard-shell">
       <header className="dashboard-header">
         <a className="brand" href="/" aria-label="ApplyFlow home">
-          <span className="brand-mark">AF</span>
+          <span className="brand-mark">A</span>
           <span>ApplyFlow</span>
         </a>
 
         <div className="header-actions">
           <span className="sync-indicator">
             <span className="sync-dot" />
-            Firebase live sync
+            Live
           </span>
           <div className="user-chip">
             <span className="user-avatar">
@@ -224,11 +286,11 @@ export function Dashboard({ user }: DashboardProps) {
             </span>
             <span className="user-copy">
               <strong>{displayName}</strong>
-              <small>{user.email || "Authenticated user"}</small>
+              <small>{user.email || "Signed in"}</small>
             </span>
           </div>
           <button
-            className="button secondary-button compact-button"
+            className="button ghost-button compact-button"
             type="button"
             onClick={() => signOut(auth)}
           >
@@ -240,157 +302,215 @@ export function Dashboard({ user }: DashboardProps) {
       <section className="dashboard-content">
         <div className="page-heading">
           <div>
-            <p className="eyebrow">Application pipeline</p>
-            <h1>Good morning, {displayName}.</h1>
+            <h1>Applications</h1>
             <p>
-              Track opportunities, move applications through your pipeline, and
-              keep the documents you need in one cloud workspace.
+              Keep every opportunity, follow-up, contact and document in one
+              place.
             </p>
           </div>
-          <button
-            className="button primary-button"
-            type="button"
-            onClick={() => {
-              setEditing(null);
-              setShowForm(true);
-            }}
-          >
-            + Add application
-          </button>
+          <div className="page-actions">
+            <button
+              className="button secondary-button"
+              type="button"
+              onClick={() => exportApplicationsCsv(applications)}
+              disabled={applications.length === 0}
+            >
+              Export CSV
+            </button>
+            <button
+              className="button primary-button"
+              type="button"
+              onClick={() => {
+                setEditing(null);
+                setShowForm(true);
+              }}
+            >
+              Add application
+            </button>
+          </div>
         </div>
 
         <section className="stats-grid" aria-label="Application statistics">
           <article className="stat-card">
-            <span>Total tracked</span>
-            <strong>{stats.total}</strong>
+            <span>Tracked</span>
+            <strong>{metrics.total}</strong>
             <small>All opportunities</small>
           </article>
           <article className="stat-card">
-            <span>Active pipeline</span>
-            <strong>{stats.active}</strong>
-            <small>Still in motion</small>
+            <span>Submitted</span>
+            <strong>{metrics.submitted}</strong>
+            <small>Applications sent</small>
           </article>
           <article className="stat-card">
-            <span>Interviews</span>
-            <strong>{stats.interviews}</strong>
-            <small>Conversations open</small>
+            <span>Interview rate</span>
+            <strong>{metrics.interviewRate}%</strong>
+            <small>Reached interview or offer</small>
+          </article>
+          <article className="stat-card stat-attention">
+            <span>Needs attention</span>
+            <strong>{metrics.overdue + metrics.dueToday}</strong>
+            <small>
+              {metrics.overdue} overdue · {metrics.dueToday} today
+            </small>
           </article>
           <article className="stat-card">
             <span>Offers</span>
-            <strong>{stats.offers}</strong>
-            <small>Positive outcomes</small>
+            <strong>{metrics.offers}</strong>
+            <small>Current offers</small>
           </article>
         </section>
 
-        <section className="toolbar">
-          <div className="search-box">
-            <span aria-hidden="true">⌕</span>
-            <input
-              value={queryText}
-              onChange={(event) => setQueryText(event.target.value)}
-              placeholder="Search company, role or location"
-              aria-label="Search applications"
-            />
-          </div>
+        {applications.length > 0 && (
+          <FollowUpPanel
+            applications={applications}
+            onEdit={openEditor}
+          />
+        )}
 
-          <select
-            value={priorityFilter}
-            onChange={(event) => setPriorityFilter(event.target.value)}
-            aria-label="Filter by priority"
-          >
-            <option value="all">All priorities</option>
-            <option value="high">High priority</option>
-            <option value="medium">Medium priority</option>
-            <option value="low">Low priority</option>
-          </select>
+        <section className="workspace">
+          <div className="workspace-toolbar">
+            <div className="workspace-filters">
+              <input
+                className="search-input"
+                value={queryText}
+                onChange={(event) => setQueryText(event.target.value)}
+                placeholder="Search company, role, source or contact"
+                aria-label="Search applications"
+              />
 
-          <span className="result-count">
-            {filteredApplications.length} shown
-          </span>
-        </section>
-
-        {loading ? (
-          <div className="empty-state">
-            <div className="loader" />
-            <h2>Loading your pipeline</h2>
-            <p>Listening for Firestore updates...</p>
-          </div>
-        ) : applications.length === 0 ? (
-          <div className="empty-state">
-            <span className="empty-icon">↗</span>
-            <h2>Your application pipeline is ready.</h2>
-            <p>
-              Add your first opportunity or load sample data to explore the
-              Firebase-powered workflow.
-            </p>
-            <div className="empty-actions">
-              <button
-                className="button primary-button"
-                type="button"
-                onClick={() => setShowForm(true)}
+              <select
+                value={priorityFilter}
+                onChange={(event) => setPriorityFilter(event.target.value)}
+                aria-label="Filter by priority"
               >
-                Add first application
-              </button>
-              <button
-                className="button secondary-button"
-                type="button"
-                onClick={seedDemoData}
-              >
-                Load sample data
-              </button>
+                <option value="all">All priorities</option>
+                <option value="high">High priority</option>
+                <option value="medium">Medium priority</option>
+                <option value="low">Low priority</option>
+              </select>
+
+              <label className="attention-filter">
+                <input
+                  type="checkbox"
+                  checked={attentionOnly}
+                  onChange={(event) =>
+                    setAttentionOnly(event.target.checked)
+                  }
+                />
+                Needs attention
+              </label>
+            </div>
+
+            <div className="toolbar-right">
+              <span className="result-count">
+                {filteredApplications.length} shown
+              </span>
+              <div className="view-switcher" aria-label="View">
+                <button
+                  className={view === "board" ? "active" : ""}
+                  type="button"
+                  onClick={() => setView("board")}
+                >
+                  Board
+                </button>
+                <button
+                  className={view === "list" ? "active" : ""}
+                  type="button"
+                  onClick={() => setView("list")}
+                >
+                  List
+                </button>
+              </div>
             </div>
           </div>
-        ) : (
-          <section className="board" aria-label="Application Kanban board">
-            {APPLICATION_STATUSES.map((status) => {
-              const statusApplications = filteredApplications.filter(
-                (application) => application.status === status,
-              );
 
-              return (
-                <section
-                  className="board-column"
-                  key={status}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={(event) => handleDrop(event, status)}
+          {dataError && <div className="data-error">{dataError}</div>}
+
+          {loading ? (
+            <div className="empty-state">
+              <div className="loader" />
+              <h2>Loading applications</h2>
+              <p>Syncing your workspace.</p>
+            </div>
+          ) : applications.length === 0 ? (
+            <div className="empty-state">
+              <h2>Start with your first application.</h2>
+              <p>
+                Add a real opportunity, or load sample records to explore the
+                workflow before connecting your own job search.
+              </p>
+              <div className="empty-actions">
+                <button
+                  className="button primary-button"
+                  type="button"
+                  onClick={() => setShowForm(true)}
                 >
-                  <header className="column-header">
-                    <div>
-                      <div className="column-title-row">
-                        <span className={"status-dot status-" + status} />
-                        <h2>{statusLabels[status]}</h2>
-                        <span className="column-count">
-                          {statusApplications.length}
-                        </span>
+                  Add application
+                </button>
+                <button
+                  className="button secondary-button"
+                  type="button"
+                  onClick={seedDemoData}
+                >
+                  Load sample data
+                </button>
+              </div>
+            </div>
+          ) : view === "list" ? (
+            <ApplicationsTable
+              applications={filteredApplications}
+              onEdit={openEditor}
+            />
+          ) : (
+            <section className="board" aria-label="Application Kanban board">
+              {APPLICATION_STATUSES.map((status) => {
+                const statusApplications = filteredApplications.filter(
+                  (application) => application.status === status,
+                );
+
+                return (
+                  <section
+                    className="board-column"
+                    key={status}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => handleDrop(event, status)}
+                  >
+                    <header className="column-header">
+                      <div>
+                        <div className="column-title-row">
+                          <h2>{statusLabels[status]}</h2>
+                          <span className="column-count">
+                            {statusApplications.length}
+                          </span>
+                        </div>
+                        <p>{statusDescriptions[status]}</p>
                       </div>
-                      <p>{statusDescriptions[status]}</p>
+                    </header>
+
+                    <div className="column-cards">
+                      {statusApplications.map((application) => (
+                        <ApplicationCard
+                          key={application.id}
+                          application={application}
+                          onEdit={openEditor}
+                          onDelete={handleDelete}
+                          onUpload={handleUpload}
+                          onDragStart={handleDragStart}
+                        />
+                      ))}
+
+                      {statusApplications.length === 0 && (
+                        <div className="column-empty">
+                          Drop an application here
+                        </div>
+                      )}
                     </div>
-                  </header>
-
-                  <div className="column-cards">
-                    {statusApplications.map((application) => (
-                      <ApplicationCard
-                        key={application.id}
-                        application={application}
-                        onEdit={(item) => {
-                          setEditing(item);
-                          setShowForm(true);
-                        }}
-                        onDelete={handleDelete}
-                        onUpload={handleUpload}
-                        onDragStart={handleDragStart}
-                      />
-                    ))}
-
-                    {statusApplications.length === 0 && (
-                      <div className="column-empty">Drop an application here</div>
-                    )}
-                  </div>
-                </section>
-              );
-            })}
-          </section>
-        )}
+                  </section>
+                );
+              })}
+            </section>
+          )}
+        </section>
       </section>
 
       {busyMessage && <div className="toast">{busyMessage}</div>}
