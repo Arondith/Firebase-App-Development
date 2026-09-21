@@ -88,12 +88,19 @@ export async function createApplication(
 }
 
 export async function updateApplication(
-  applicationId: string,
-  input: Partial<ApplicationInput>,
+  application: JobApplication,
+  input: ApplicationInput,
 ): Promise<void> {
-  await updateDoc(doc(db, "applications", applicationId), {
+  const statusChanged = application.status !== input.status;
+
+  await updateDoc(doc(db, "applications", application.id), {
     ...input,
+    highestStageReached: maxStage(
+      application.highestStageReached ?? application.status,
+      input.status,
+    ),
     updatedAt: serverTimestamp(),
+    ...(statusChanged ? { statusChangedAt: serverTimestamp() } : {}),
   });
 }
 
