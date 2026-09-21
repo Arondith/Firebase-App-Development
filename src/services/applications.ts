@@ -25,29 +25,50 @@ import type {
 
 const applicationsCollection = collection(db, "applications");
 
+const stageRank: Record<ApplicationStatus, number> = {
+  wishlist: 0,
+  applied: 1,
+  rejected: 1,
+  interview: 2,
+  offer: 3,
+};
+
+function maxStage(
+  current: ApplicationStatus | undefined,
+  next: ApplicationStatus,
+): ApplicationStatus {
+  if (!current) return next;
+  return stageRank[next] > stageRank[current] ? next : current;
+}
+
 export function subscribeToApplications(
   userId: string,
   callback: (applications: JobApplication[]) => void,
+  onError?: (error: Error) => void,
 ): Unsubscribe {
   const applicationsQuery = query(
     applicationsCollection,
     where("userId", "==", userId),
   );
 
-  return onSnapshot(applicationsQuery, (snapshot) => {
-    const applications = snapshot.docs.map((document) => ({
-      id: document.id,
-      ...(document.data() as Omit<JobApplication, "id">),
-    }));
+  return onSnapshot(
+    applicationsQuery,
+    (snapshot) => {
+      const applications = snapshot.docs.map((document) => ({
+        id: document.id,
+        ...(document.data() as Omit<JobApplication, "id">),
+      }));
 
-    applications.sort((a, b) => {
-      const aTime = a.updatedAt?.toMillis?.() ?? 0;
-      const bTime = b.updatedAt?.toMillis?.() ?? 0;
-      return bTime - aTime;
-    });
+      applications.sort((a, b) => {
+        const aTime = a.updatedAt?.toMillis?.() ?? 0;
+        const bTime = b.updatedAt?.toMillis?.() ?? 0;
+        return bTime - aTime;
+      });
 
-    callback(applications);
-  });
+      callback(applications);
+    },
+    (error) => onError?.(error),
+  );
 }
 
 export async function createApplication(
@@ -57,8 +78,10 @@ export async function createApplication(
   const created = await addDoc(applicationsCollection, {
     ...input,
     userId,
+    highestStageReached: input.status,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
+    statusChangedAt: serverTimestamp(),
   });
 
   return created.id;
@@ -75,11 +98,18 @@ export async function updateApplication(
 }
 
 export async function moveApplication(
-  applicationId: string,
+  application: JobApplication,
   status: ApplicationStatus,
 ): Promise<void> {
-  await updateDoc(doc(db, "applications", applicationId), {
+  if (application.status === status) return;
+
+  await updateDoc(doc(db, "applications", application.id), {
     status,
+    highestStageReached: maxStage(
+      application.highestStageReached ?? application.status,
+      status,
+    ),
+    statusChangedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 }
@@ -122,7 +152,7 @@ export async function deleteApplication(
     try {
       await deleteObject(ref(storage, application.attachmentPath));
     } catch {
-      // The record should still be removable if a file was already deleted.
+      // Keep deletion idempotent if the file has already been removed.
     }
   }
 
