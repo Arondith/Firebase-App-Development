@@ -1,0 +1,23 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function ownsExistingApplication() {
+      return signedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /applications/{applicationId} {
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid;
+
+      allow read, delete: if ownsExistingApplication();
+
+      allow update: if ownsExistingApplication()
+        && request.resource.data.userId == request.auth.uid;
+    }
+  }
+}
