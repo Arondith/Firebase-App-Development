@@ -6,18 +6,44 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function ownsExistingApplication() {
-      return signedIn() && resource.data.userId == request.auth.uid;
+    function isOwner(userId) {
+      return signedIn() && userId == request.auth.uid;
+    }
+
+    function validStatus(status) {
+      return status in [
+        'wishlist',
+        'applied',
+        'interview',
+        'offer',
+        'rejected'
+      ];
+    }
+
+    function validPriority(priority) {
+      return priority in ['low', 'medium', 'high'];
+    }
+
+    function validCoreFields(data) {
+      return data.company is string
+        && data.company.size() > 0
+        && data.company.size() <= 160
+        && data.role is string
+        && data.role.size() > 0
+        && data.role.size() <= 200
+        && validStatus(data.status)
+        && validPriority(data.priority);
     }
 
     match /applications/{applicationId} {
-      allow create: if signedIn()
-        && request.resource.data.userId == request.auth.uid;
+      allow create: if isOwner(request.resource.data.userId)
+        && validCoreFields(request.resource.data);
 
-      allow read, delete: if ownsExistingApplication();
+      allow read, delete: if isOwner(resource.data.userId);
 
-      allow update: if ownsExistingApplication()
-        && request.resource.data.userId == request.auth.uid;
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        && validCoreFields(request.resource.data);
     }
   }
 }
